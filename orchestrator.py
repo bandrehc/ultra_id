@@ -1,6 +1,13 @@
 """
 UltraBuscador: orquestador que consolida todas las fuentes.
-Routing por tipo de documento. Batch con pre-fetch API RECPO.
+
+Arquitectura de paralelismo:
+  - Nivel documento: ThreadPoolExecutor(max_workers) distribuye documentos entre workers.
+  - Nivel fuente:    dentro de cada documento, las fuentes Selenium se ejecutan en paralelo
+                     (ThreadPoolExecutor interno). Cada fuente tiene su propio driver en
+                     _WorkerContext, por lo que no comparten estado mutable.
+  - Tiempo por RUC ≈ max(fuente_más_lenta) en vez de sum(todas las fuentes).
+  - RECPO: API pre-batcheada antes del loop; se aplica desde cache sin bloquear.
 """
 from __future__ import annotations
 
@@ -108,6 +115,49 @@ class UltraBuscador:
             data = self._recpo_buscador.consultar_batch_rucs(batch)
             self._recpo_cache.update(data)
 
+    def _run_fuentes_en_paralelo(
+        self,
+        fuentes: list,
+        ctx: _WorkerContext,
+        resultado: ResultadoDocumento,
+    ) -> None:
+        """Ejecuta fuentes Selenium en paralelo para un mismo documento.
+
+        Cada fuente tiene su propio driver en _WorkerContext; al escribir campos
+        disjuntos (ruc_*, osce_*, sbs_*, reinfo_*) en el mismo ResultadoDocumento
+        no hay race conditions. Los buscadores se pre-inicializan en el thread
+        actual antes de despacharlos a threads internos para evitar lazy-init races.
+        """
+        if not fuentes:
+            return
+
+        if len(fuentes) == 1:
+            f = fuentes[0]
+            try:
+                ctx.get(f).consultar(resultado)
+            except Exception as exc:
+                ec = f"error_{f}"
+                if hasattr(resultado, ec):
+                    setattr(resultado, ec, str(exc)[:120])
+            return
+
+        # Pre-inicializar buscadores en el thread actual del worker
+        buscadores = {f: ctx.get(f) for f in fuentes}
+
+        with ThreadPoolExecutor(max_workers=len(fuentes)) as inner:
+            fut_to_fuente = {
+                inner.submit(buscadores[f].consultar, resultado): f
+                for f in fuentes
+            }
+            for fut in as_completed(fut_to_fuente):
+                f = fut_to_fuente[fut]
+                try:
+                    fut.result()
+                except Exception as exc:
+                    ec = f"error_{f}"
+                    if hasattr(resultado, ec):
+                        setattr(resultado, ec, str(exc)[:120])
+
     def _consultar_uno_con_ctx(
         self,
         numero: str,
@@ -120,14 +170,8 @@ class UltraBuscador:
         if not ok:
             return resultado
 
-        # Fuentes Selenium — secuenciales dentro del worker
-        for fuente in _FUENTES_SELENIUM.get(tipo, []):
-            try:
-                ctx.get(fuente).consultar(resultado)
-            except Exception as exc:
-                err_campo = f"error_{fuente}"
-                if hasattr(resultado, err_campo):
-                    setattr(resultado, err_campo, str(exc)[:120])
+        # Fuentes Selenium — en paralelo (cada fuente usa su propio driver)
+        self._run_fuentes_en_paralelo(_FUENTES_SELENIUM.get(tipo, []), ctx, resultado)
 
         # Fuentes API — aplicar desde cache (pre-fetched) o consultar si falta
         for fuente in _FUENTES_API.get(tipo, []):
