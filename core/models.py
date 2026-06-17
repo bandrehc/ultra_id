@@ -24,6 +24,7 @@ class ResultadoDocumento:
     ruc_tipo_empresa: Optional[str] = None
     ruc_condicion: Optional[str] = None
     ruc_fecha_inicio: Optional[str] = None
+    ruc_anos_actividad: Optional[int] = None
     ruc_direccion: Optional[str] = None
     ruc_urbanizacion: Optional[str] = None
     ruc_distrito: Optional[str] = None
@@ -52,14 +53,23 @@ class ResultadoDocumento:
     recpo_nro_resolucion: Optional[str] = None
     recpo_fecha_rd: Optional[str] = None
 
-    # --- OSCE (apps.osce.gob.pe) ---
+    # --- OSCE (apps.osce.gob.pe) — Registro Nacional de Proveedores ---
     osce_registrado: Optional[bool] = None
     osce_nombre_proveedor: Optional[str] = None
     osce_estado_rns: Optional[str] = None
     osce_tipo_proveedor: Optional[str] = None
+    osce_n_sanciones_tcp: Optional[int] = None
     osce_n_penalidades: Optional[int] = None
-    osce_n_sanciones: Optional[int] = None
-    osce_n_inhabilitaciones: Optional[int] = None
+    osce_n_inhabilitacion_judicial: Optional[int] = None
+    osce_n_inhabilitacion_administrativa: Optional[int] = None
+    osce_n_socios: Optional[int] = None
+    osce_socios_accionistas: Optional[str] = None       # "Nombre (Tipo Doc Nro); ..."
+    osce_n_representantes: Optional[int] = None
+    osce_representantes: Optional[str] = None            # "Nombre (Tipo Doc Nro); ..."
+    osce_n_servicios_vigentes: Optional[int] = None
+    osce_n_servicios_no_vigentes: Optional[int] = None
+    osce_n_experiencia: Optional[int] = None
+    osce_experiencia_resumen: Optional[str] = None        # primeros registros de "Experiencia del Proveedor"
     osce_detalle_url: Optional[str] = None
 
     # --- SBS Sujeto Obligado (sbs.gob.pe) ---

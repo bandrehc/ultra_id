@@ -1,6 +1,7 @@
 """RUC → datos de empresa (universidadperu.com)"""
 from __future__ import annotations
 import time
+from datetime import date, datetime
 from typing import Optional
 
 from selenium.webdriver.common.by import By
@@ -31,6 +32,18 @@ _CAMPOS = {
 }
 
 
+def _anos_desde(fecha_str: str) -> Optional[int]:
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            inicio = datetime.strptime(fecha_str.strip(), fmt).date()
+            hoy = date.today()
+            anos = hoy.year - inicio.year - ((hoy.month, hoy.day) < (inicio.month, inicio.day))
+            return max(0, anos)
+        except ValueError:
+            continue
+    return None
+
+
 def _parsear_html(html: str) -> Optional[dict]:
     soup = BeautifulSoup(html, "html.parser")
     h1 = soup.find("h1")
@@ -47,7 +60,13 @@ def _parsear_html(html: str) -> Optional[dict]:
         if campo:
             data[campo] = dd.get_text(" ", strip=True)
 
-    return data if data else None
+    if not data:
+        return None
+    if "ruc_fecha_inicio" in data:
+        anos = _anos_desde(data["ruc_fecha_inicio"])
+        if anos is not None:
+            data["ruc_anos_actividad"] = anos
+    return data
 
 
 class RucBuscador(BaseBuscador):
